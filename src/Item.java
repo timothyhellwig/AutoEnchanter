@@ -2,27 +2,43 @@ import org.sikuli.script.*;
 import java.util.*;
 import java.lang.reflect.*;
 
-public class Item extends AutoEnchanter {
+public class Item{
+    AutoEnchanter ae;
+
     // Sikuli Match object for the item we're going to enchant
     final Pattern itemStack;
 
     // Counters and trackers
-    private int totalEnchanted = 0; // keeps track of total number of enchanted mats made
+    int totalEnchanted = 0; // keeps track of total number of enchanted mats made
     private int invStacks = 0; // keeps tracks of how many unenchanted stacks are in inventory
     int stacksToMake = 1; // number of enchanted stacks to make
     int stacksPerEnchant = 5; // stacks required per enchant
 
     // Constructor
-    Item(Pattern itemStack) {
+    Item(AutoEnchanter ae, Pattern itemStack) {
+        this.ae = ae;
         this.itemStack = itemStack;
+    }
+
+    boolean finishedEnchanting() {
+        if(totalEnchanted / 64 >= stacksToMake) {
+            Sikulix.popup("Enchanting Completed");
+            return true;
+        } else {
+            return false;
+        }
     }
 
     // Enchant loop, checks to ensure correct screen is open, and then enchants
     void doEnchant(Menu menu) {
-        menu.verifyCraftingScreen();
+        if (!menu.verifyCraftingScreen()) {
+            ae.stop();
+            return;
+        }
         int counter = 0;
         invStacks = 0;
-        Iterator<Match> mm = menu.findInvStacks(this);
+        Iterator<Match> mm = menu.findInvStacks();
+        if (mm == null) return;
         List mmList = new ArrayList();
         while (mm.hasNext()) {
             mmList.add(mm.next());
@@ -34,11 +50,11 @@ public class Item extends AutoEnchanter {
             return;
         }
         while (mmSorted.hasNext()) {
-            checkHotKeys();
-            doShiftClick(menu.s, mmSorted.next());
+            ae.checkHotKeys();
+            ae.doShiftClick(menu.s, mmSorted.next());
             counter += 1;
             if (counter == stacksPerEnchant) {
-                doShiftClick(menu.s, menu.ref);
+                ae.doShiftClick(menu.s, menu.ref);
                 totalEnchanted += 2;
                 invStacks -= counter;
                 counter = 0;
@@ -51,16 +67,42 @@ public class Item extends AutoEnchanter {
 
     // Buy loop, checks to ensure correct screen is open, and then buys
     void doBuy(Menu menu) {
-        menu.offMenu.hover();
-        menu.verifyBuyScreen();
-        if(totalEnchanted / 64 >= stacksToMake) {
-            Sikulix.popup("Enchanting Completed");
-            System.exit(0);
+        if (!menu.verifyBuyScreen()) {
+            ae.stop();
+            return;
         }
         int stacksToBuy = stacksNeeded() < menu.emptySlots() ? stacksNeeded() : menu.emptySlots();
         for (int i = 0; i < stacksToBuy; i++) {
-            checkHotKeys();
-            doLeftClick(menu.ref);
+            ae.checkHotKeys();
+            ae.doLeftClick(menu.ref);
+        }
+    }
+
+    /**
+     * Searches the open chest for the itemStack, and moves as many stacks as needed/possible to inventory
+     *
+     * @param menu Menu object on which to perform actions
+     */
+    void getFromChest(Menu menu) {
+        if (!menu.verifyNetherStar()) {
+            ae.stop();
+            return;
+        }
+        int emptyMenuSlots = menu.emptySlots();
+        int stacksToGet = stacksNeeded() < emptyMenuSlots ? stacksNeeded() : emptyMenuSlots;
+        Iterator<Match> mm = menu.findChestStacks();
+        if (mm == null) return;
+        List mmList = new ArrayList();
+        while (mm.hasNext()) {
+            mmList.add(mm.next());
+        }
+        mmList.sort(new MatchComparator());
+        Iterator<Match> mmSorted = mmList.iterator();
+        while (mmSorted.hasNext() && stacksToGet > 0) {
+            ae.checkHotKeys();
+            ae.doShiftClick(menu.s, mmSorted.next());
+
+            stacksToGet--;
         }
     }
 

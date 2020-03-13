@@ -5,9 +5,15 @@ import java.io.*;
 
 public class AutoEnchanter {
     private boolean hotKeyP = false;
+    private View view;
+    private Menu menu;
+    private Item item;
+    boolean run = false;
 
-    // Constructor
-    AutoEnchanter() {
+    /**
+     * Constructor
+     */
+    public AutoEnchanter() {
         // Shift + x terminates this program
         HotkeyListener x_SHIFT = new HotkeyListener() {
             @Override
@@ -25,10 +31,20 @@ public class AutoEnchanter {
             }
         };
         HotkeyManager.getInstance().addHotkey("p", KeyModifier.SHIFT, p_SHIFT);
+
+        view = new View(this);
+        getSettings();
     }
 
     /**
-     * Logs an exception, along with the values of this Menu object
+     * Sets run to false, which will stop all enchanting, and enable the Settings window
+     */
+    void stop() {
+        run = false;
+    }
+
+    /**
+     * Logs an exception, along with the values of the menu object
      *
      * @param exception The exception to log
      */
@@ -40,7 +56,7 @@ public class AutoEnchanter {
 
             bw.write("----------------------------------------\n");
             bw.write(new Date().toString() + "\n");
-            bw.write(this.toString() + "\n");
+            bw.write(menu.toString() + "\n");
 
             bw.close();
 
@@ -57,12 +73,23 @@ public class AutoEnchanter {
         }
     }
 
-    // Returns the center point of a given match
-    private Location location(Match match) {
+    /**
+     * Find the center point of a Match object
+     *
+     * @param match Match object
+     * @return new Location object of the center of the match
+     */
+    Location location(Match match) {
         return new Location(match.x + match.w / 2, match.y + match.h / 2);
     }
 
-    // Attempts to find given pattern on the whole screen
+    /**
+     * Try-Catch wrapper for Sikuli find() method
+     *
+     * @param screen Screen on which to search
+     * @param pattern Pattern to search for
+     * @return The match object resulting from a successful search
+     */
     Match tryFind(Screen screen, Pattern pattern){
         try {
             return screen.find(pattern);
@@ -72,7 +99,13 @@ public class AutoEnchanter {
         }
     }
 
-    // Attempts to find given pattern in given region
+    /**
+     * Try-Catch wrapper for Sikuli find() method
+     *
+     * @param region Region in which to search
+     * @param pattern Pattern to search for
+     * @return The match object resulting from a successful search
+     */
     Match tryFind(Region region, Pattern pattern) {
         try {
             return region.find(pattern);
@@ -82,44 +115,54 @@ public class AutoEnchanter {
         }
     }
 
-    // Finds all matches of a given pattern
+    /**
+     * Try-Catch wrapper with error logging for Sikuli findAll() method
+     *
+     * @param region Region in which to search
+     * @param pattern Pattern to search for
+     * @return The match object resulting from a successful search
+     */
     Iterator<Match> tryFindAll(Region region, Pattern pattern) {
         try {
+            menu.offMenu.hover();
             return region.findAll(pattern);
         }
         catch (Exception e) {
             logException(e);
-            Sikulix.popup("Error: Pattern not found in region");
-            System.exit(1);
+            Sikulix.popError("Error: Pattern not found in region");
             return null;
         }
     }
 
-    // Try wrapper for Thread.sleep()
+    /**
+     * Try-Catch wrapper with error logging for Thread.sleep() method
+     *
+     * @param ns Nano-seconds to sleep for
+     */
     private void trySleep(int ns) {
         try {
             Thread.sleep(ns);
         }
         catch (Exception e) {
             logException(e);
-            Sikulix.popup("Error: Sleep error");
-            System.exit(1);
+            Sikulix.popError("Error: Sleep error");
         }
     }
 
     /**
      * Try-Catch wrapper with error logging for Sikuli wait() method
      *
-     * @param region Region in which to search for
+     * @param region Region in which to search
      * @param pattern Pattern to search for
      * @return The match object resulting from a successful search
      */
     Match tryWait(Region region, Pattern pattern) {
         try {
+            menu.offMenu.hover();
             return region.wait(pattern, 5);
         } catch (Exception e) {
             logException(e);
-            System.exit(1);
+            Sikulix.popError("Error: Pattern not found in region");
             return null;
         }
     }
@@ -132,7 +175,12 @@ public class AutoEnchanter {
         trySleep(r);
     }
 
-    // Do a shift click, spaced out with sleeps, to keep CPS low
+    /**
+     * Do a shift click, spaced out with sleeps, to keep CPS low
+     *
+     * @param screen Screen on which to type
+     * @param match Match on which to click
+     */
     void doShiftClick(Screen screen, Match match) {
         screen.keyDown(Key.SHIFT);
         trySleep(100);
@@ -142,24 +190,49 @@ public class AutoEnchanter {
         randSleep();
     }
 
-    // Overloaded method, for Match object
-    void doLeftClick(Match match) {
-        doLeftClick(location(match));
+    /**
+     * Overloaded method for left clicking without moving the mouse
+     */
+    private void doLeftClick() {
+        trySleep(200);
+        menu.s.click();
+        randSleep();
     }
 
-    // Do a left click, spaced out with sleeps, to keep CPS low
-    private void doLeftClick(Location location) {
+    /**
+     * Do a left click, spaced out with sleeps, to keep CPS low
+     *
+     * @param location Location to click at
+     */
+    void doLeftClick(Location location) {
         trySleep(200);
         location.click();
         randSleep();
     }
 
-    // Overloaded method, for Match object
+    /**
+     * Overloaded method for right clicking without moving the mouse
+     */
+    private void doRightClick() {
+        trySleep(200);
+        menu.s.rightClick();
+        randSleep();
+    }
+
+    /**
+     * Overloaded method for right clicking on a Match object
+     *
+     * @param match Match object to click on
+     */
     private void doRightClick(Match match) {
         doRightClick(location(match));
     }
 
-    // Do a right click, spaced out with sleeps, to keep CPS low
+    /**
+     * Do a right click, spaced out with sleeps, to keep CPS low
+     *
+     * @param location Location to click at
+     */
     private void doRightClick(Location location) {
         trySleep(200);
         location.rightClick();
@@ -167,74 +240,115 @@ public class AutoEnchanter {
 
     }
 
-    // Do a key press, spaced out with sleeps, to keep CPS low
+    /**
+     * Press the 'e' key, spaced out with sleeps, to keep CPS low and pad for latency
+     *
+     * @param screen Screen object on which to type
+     */
     private void typeE(Screen screen) {
         trySleep(100);
         screen.type("e");
+        trySleep(200);
         randSleep();
     }
 
-    // Checks the quit or pause hotkeys, and takes appropriate action
+    /**
+     * Checks if the pause hotkey was hit, and if so, sleeps until it's hit again
+     */
     void checkHotKeys() {
         while (hotKeyP) {
             trySleep(1000);
         }
     }
 
-    public static void main(String[] args) {
-        double minSimilarity = 0.99;
-        // Get match similarity from user
-        try {
-            String s = Sikulix.input("Match Sensitivity:", "0.99");
-            minSimilarity = Double.parseDouble(s);
-        }
-        catch (Exception e) {
-            Sikulix.popup("Error: Must input one number between 0 and 1 exclusive. Resorting to default value.");
-        }
-
-        // Mouse move speed and match similarity
-        Settings.MoveMouseDelay = (float) 0.0;
-        Settings.MinSimilarity = minSimilarity;
-
-        // File where images are stored
-        ImagePath.add("AutoEnchanter/images");
-
-        // Create instances necessary for this program
-        AutoEnchanter ae = new AutoEnchanter();
-        Menu menu = new Menu();
-        Item item = menu.createItem();
-
-        // Get options from user
-        try {
-            String options = Sikulix.input("Enchanted Stacks to make:", "1");
-            String[] optionArr = options.split(" ", 0);
-            item.stacksToMake = Integer.parseInt(optionArr[0]);
-            if (optionArr.length == 2) {
-                item.stacksPerEnchant = Integer.parseInt(optionArr[1]);
-            }
-        }
-        catch (Exception e) {
-            Sikulix.popup("Error: Must input only 1 or 2 integers");
-            System.exit(1);
-        }
-
+    /**
+     * Main enchant loop, runs through the crafting/buying process until finished
+     */
+    private void enchantLoop() {
         // Click on the app window to focus it
-        ae.doLeftClick(menu.offMenu);
+        doLeftClick(menu.offMenu);
+        Match m;
 
         // Main loop, that runs through all the steps until interrupt sequence is detected, or enchant limit is reached
-        while (true) {
-            ae.checkHotKeys();
+        while (run) {
+            checkHotKeys();
+
             item.doEnchant(menu);
-            ae.typeE(menu.s);
-            ae.doLeftClick(menu.merchant);
-            ae.doRightClick(menu.findBuy(item));
-            item.doBuy(menu);
-            ae.typeE(menu.s);
-            ae.typeE(menu.s);
-            ae.doLeftClick(menu.verifyNetherStar());
-            menu.offMenu.hover();
-            ae.tryWait(menu.buyRegion, menu.barrier);
-            ae.doLeftClick(menu.craftingBench);
+            view.progressBar.setValue(item.totalEnchanted);
+            if (item.finishedEnchanting()) return;
+            if (!run) return;
+
+            typeE(menu.s);
+
+            if (menu.itemSource == 0) {
+                doLeftClick();
+
+                m = menu.findBuy(item);
+                if (m == null) return;
+
+                doRightClick(m);
+
+                item.doBuy(menu);
+            } else {
+                doRightClick();
+                item.getFromChest(menu);
+            }
+
+            if (!run) return;
+
+            typeE(menu.s);
+            typeE(menu.s);
+
+            if (!menu.verifyNetherStar()) return;
+            doLeftClick(menu.nethStar);
+
+            if (tryWait(menu.buyRegion, menu.barrier) == null) return;
+            doLeftClick(menu.craftingBench);
         }
+
+    }
+
+    /**
+     * Main control loop, manages, the settings window, and the crafting loop
+     */
+    private void getSettings() {
+        while (true) {
+            if (!run) {
+                trySleep(1000);
+            } else {
+                Settings.MoveMouseDelay = (float) 0.0;
+                Settings.MinSimilarity = view.minSimilarity;
+
+                // Path where images are stored
+                ImagePath.add("AutoEnchanter/images");
+
+                menu = new Menu(this);
+                if(!run) {
+                    view.settingsEnabled(true);
+                    continue;
+                }
+
+                item = menu.createItem();
+
+                menu.itemSource = view.itemSource;
+                item.stacksToMake = view.stacksToMake;
+                item.stacksPerEnchant = view.stacksPerEnchant;
+
+                enchantLoop();
+
+                run = false;
+
+                view.settingsEnabled(true);
+            }
+        }
+    }
+
+    /**
+     * Main function run upon initialization that starts the application by creating a new AutoEnchanter instance
+     *
+     * @param args Not used
+     */
+    public static void main(String[] args) {
+        new AutoEnchanter();
     }
 }

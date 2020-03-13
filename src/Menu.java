@@ -4,12 +4,14 @@ import java.lang.reflect.*;
 import java.io.*;
 import javax.imageio.ImageIO;
 
-public class Menu extends AutoEnchanter {
+public class Menu {
+    private AutoEnchanter ae;
     private Item item;
     final Screen s = new Screen();
+    int itemSource;
 
     // The ratio that was used to scale barrier.png down for a successful match
-    private final float invScale;
+    private float invScale = 1;
 
     // Images used in searches
     final Pattern barrier = new Pattern("barrier.png").similar(0.7);
@@ -21,32 +23,41 @@ public class Menu extends AutoEnchanter {
     private Match neth;
 
     // Various static locations on the screen
-    final Location offMenu;
-    final Location merchant;
-    final Location craftingBench;
-    final Region buyRegion;
-    private final Region invRegion;
-    private final Region refRegion;
-    private final Region nethRegion;
+    Location offMenu = null;
+    Location craftingBench = null;
+    Location nethStar = null;
+    Region buyRegion = null;
+    Location stack64 = null;
+    private Region invRegion = null;
+    private Region refRegion = null;
+    private Region nethRegion = null;
+    private Region merchantRegion = null;
 
-    // Constructor
-    public Menu() {
+    /**
+     * Constructor
+     *
+     * @param ae The AutoEnchanter object that has called this constructor
+     */
+    public Menu(AutoEnchanter ae) {
+        this.ae = ae;
+
         // Initial search for barrier block
-        ref  = tryFind(s, barrier);
+        ref  = ae.tryFind(s, barrier);
 
         // Scale factor for the Pattern.resize() method
         float scale = (float) 1.0;
 
         // While we're not finding the barrier, scale down the image a little, and try to find it again
-        while(ref == null && scale > 0.05) {
+        while(ref == null && scale > 0.2) {
             scale -= 0.02;
-            ref = tryFind(s, barrier.resize(scale));
+            ref = ae.tryFind(s, barrier.resize(scale));
         }
 
         // If ref == null, then barrier wasn't found at any size, so exit
         if (ref == null) {
-            Sikulix.popup("Error: Pattern not found on screen");
-            System.exit(1);
+            Sikulix.popError("Error: Pattern not found on screen");
+            ae.run = false;
+            return;
         }
 
         // Resize emptySlot to the same scale as barrier
@@ -57,72 +68,106 @@ public class Menu extends AutoEnchanter {
         scale = (float) 1.0;
 
         // Various static locations on the screen
-        offMenu = new Location(ref.x + slot(3), ref.y);
-        merchant = new Location(ref.x - slot(2), ref.y + slot(3));
-        craftingBench = new Location(ref.x - slot(2), ref.y + slot(1));
-        buyRegion = new Region(ref.x - slot(7), ref.y - slot(2), slot(10), slot(6));
-        invRegion = new Region(ref.x - slot(7), ref.y + slot(4), slot(10), slot(5));
+        offMenu = new Location(ae.location(ref).x + slot(4), ae.location(ref).y);
+        craftingBench = new Location(ae.location(ref).x - slot(1), ae.location(ref).y + slot(1));
+        buyRegion = new Region(ref.x - slot(5), ref.y - slot(2), slot(9), slot(6));
+        invRegion = new Region(ref.x - slot(5), ref.y + slot(4), slot(9), slot(5));
         refRegion = new Region(ref.x - 1, ref.y - 1, ref.w + 1, ref.h + 1);
+        stack64 = ae.location(ref);
+        stack64.x += slot(1);
 
         // Initial search for nether star
-        neth = tryFind(invRegion, netherStar);
+        neth = ae.tryFind(invRegion, netherStar);
 
         // While we're not finding the nether star, scale down the image a little, and try to find it again
         while(neth == null && scale > 0.05) {
             scale -= 0.02;
-            neth = tryFind(invRegion, netherStar.resize(scale));
+            neth = ae.tryFind(invRegion, netherStar.resize(scale));
         }
 
         // If neth == null, then netherStar wasn't found at any size, so exit
         if (neth == null) {
-            tryWait(invRegion, netherStar);
+            ae.run = false;
         }
 
         nethRegion = new Region(neth.x - 1, neth.y - 1, neth.w + 1, neth.h + 1);
+        nethStar = new Location(ae.location(neth).x, ae.location(neth).y - slot(1.5));
     }
 
-    // Single function for calculating pixel location of any given inventory slot
-    private int slot(int slots) {
+    /**
+     * Single function for calculating pixel location of any given inventory slot
+     *
+     * @param slots The number of slots to offset the calculation by
+     * @return The pixel location of desired inventory slot
+     */
+    private int slot(double slots) {
         return (int) (slots * 90 * invScale);
     }
 
-    // Encapsulation of screen search for buy screen
+    /**
+     * Finds the item to buy on the merchant screen
+     *
+     * @param item The item to be found
+     * @return The match object of the successful find
+     */
     Match findBuy(Item item) {
-        return tryWait(buyRegion, item.itemStack);
+        return ae.tryWait(buyRegion, item.itemStack);
     }
 
     /**
      * Verify that the nether star is visible
      *
-     * @return Match object of the nether star
+     * @return True if visible, else false
      */
-    Match verifyNetherStar() {
-        return tryWait(invRegion, netherStar);
+    boolean verifyNetherStar() {
+        return ae.tryWait(invRegion, netherStar) == null ? false : true;
     }
 
     /**
-     * Verify that the buy screen is open.
+     * Verify that the buy screen is open
+     *
+     * @return True if open, else false
      */
-    void verifyBuyScreen() {
-        tryWait(refRegion, item.itemStack);
+    boolean verifyBuyScreen() {
+        return ae.tryWait(refRegion, item.itemStack) == null ? false : true;
     }
 
     /**
      * Verify that the crafting screen is open
+     *
+     * @return True if open, else false
      */
-    void verifyCraftingScreen() {
-        tryWait(refRegion, barrier);
+    boolean verifyCraftingScreen() {
+        return ae.tryWait(refRegion, barrier.resize(invScale)) == null ? false : true;
     }
 
-    // Encapsulation of screen search for inventory stacks
-    Iterator<Match> findInvStacks(Item item) {
-        return tryFindAll(invRegion, item.itemStack);
+    /**
+     * Finds all stacks of the item to enchant in the inventory region
+     *
+     * @return A match iterator of all found matches
+     */
+    Iterator<Match> findInvStacks() {
+        return ae.tryFindAll(invRegion, item.itemStack);
     }
 
-    // Returns the number of empty slots in inventory
+    /**
+     * Finds all stacks of the item to enchant in the buy region
+     *
+     * @return A Match iterator of all found matches
+     */
+    Iterator<Match> findChestStacks() {
+        return ae.tryFindAll(buyRegion, item.itemStack);
+    }
+
+    /**
+     * Returns the number of empty slots in inventory
+     *
+     * @return The number of empty slots in inventory
+     */
     int emptySlots() {
         int sum = 0;
-        Iterator<Match> mm = tryFindAll(invRegion, emptySlot);
+        Iterator<Match> mm = ae.tryFindAll(invRegion, emptySlot);
+        if(mm == null) return sum;
         while(mm.hasNext()) {
             mm.next();
             sum++;
@@ -130,16 +175,22 @@ public class Menu extends AutoEnchanter {
         return sum;
     }
 
-    // Create and return a new Item instance
+    /**
+     * Create and return a new Item instance
+     *
+     * @return Instance of a new item
+     */
     Item createItem() {
         // Pulls the item to enchant from the inventory slot next to the menu star
         ScreenImage imgCap = s.capture(neth.x - slot(1) + (int) (neth.w * 0.1), neth.y, (int) (neth.w / 1.3), neth.h / 2);
         Pattern itemStack = new Pattern(imgCap);
-        item = new Item(itemStack);
+        item = new Item(ae, itemStack);
         return item;
     }
 
-    // Saves the working patterns to files, for debugging analysis
+    /**
+     * Saves the working patterns to files, for debugging analysis
+     */
     private void imgDump() {
         try {
             ImageIO.write(item.itemStack.getBImage(), "png", new File("AE_Log/itemStack.png"));
@@ -160,6 +211,11 @@ public class Menu extends AutoEnchanter {
         }
     }
 
+    /**
+     * Converts all variables of this file to strings, for debugging purposes
+     *
+     * @return A string containing all the variables associated with this object and their values
+     */
     public String toString() {
         StringBuilder result = new StringBuilder();
         String newLine = System.getProperty("line.separator");
@@ -168,7 +224,7 @@ public class Menu extends AutoEnchanter {
         result.append( " Object {" );
         result.append(newLine);
 
-        // Determine fields declared in this class only (no fields of superclass)
+        // Determine fields declared in this class only (no fields of aeclass)
         Field[] fields = this.getClass().getDeclaredFields();
 
         // Print field names paired with their values
